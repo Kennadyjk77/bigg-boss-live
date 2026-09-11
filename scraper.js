@@ -44,4 +44,5 @@ async function scrapeStream() {
     }
 }
 
-scrape.js();
+// சரியான பங்கஷன் பெயர் இங்கே கொடுக்கப்பட்டுள்ளது
+scrapeStream();
