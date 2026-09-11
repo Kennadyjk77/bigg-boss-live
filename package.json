@@ -1,0 +1,12 @@
+{
+  "name": "bigg-boss-live",
+  "version": "1.0.0",
+  "description": "Auto stream scraper",
+  "main": "scraper.js",
+  "scripts": {
+    "start": "node scraper.js"
+  },
+  "dependencies": {
+    "puppeteer": "^22.0.0"
+  }
+}
