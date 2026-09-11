@@ -4,6 +4,7 @@ const fs = require('fs');
 async function scrapeStream() {
     let browser;
     try {
+        console.log("Launching browser...");
         browser = await puppeteer.launch({
             headless: "new",
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
@@ -13,20 +14,31 @@ async function scrapeStream() {
 
         let streamUrl = '';
 
+        // Capture all network requests to find .m3u8 or video manifests
         page.on('request', (request) => {
             const url = request.url();
-            if (url.includes('.m3u8')) {
-                streamUrl = url;
+            if (url.includes('.m3u8') || url.includes('.ts') || url.includes('playlist')) {
+                console.log("Captured potential stream URL:", url);
+                if (url.includes('.m3u8')) {
+                    streamUrl = url;
+                }
             }
         });
 
+        console.log("Navigating to target site...");
         await page.goto('https://stream2.zoloj.com/player?lang=tamil', { waitUntil: 'networkidle2', timeout: 60000 });
-        await new Promise(resolve => setTimeout(resolve, 6000));
+        
+        // Wait longer for video player and scripts to load fully
+        await new Promise(resolve => setTimeout(resolve, 10000));
 
+        // Fallback: search inside page content if network event missed it
         if (!streamUrl) {
+            console.log("Checking page content for stream links...");
             const html = await page.content();
             const match = html.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
-            if (match) streamUrl = match[0];
+            if (match) {
+                streamUrl = match[0];
+            }
         }
 
         await browser.close();
@@ -36,13 +48,15 @@ async function scrapeStream() {
             fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
             console.log("Stream URL saved successfully:", streamUrl);
         } else {
-            console.log("Stream URL not found");
+            console.log("Stream URL not found after deep scan");
+            // Save empty/error state so json exists for pages
+            const data = { success: false, url: "", updated_at: new Date().toISOString() };
+            fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
         }
     } catch (error) {
         if (browser) await browser.close();
-        console.error("Error:", error);
+        console.error("Error during scraping:", error);
     }
 }
 
-// சரியான பங்கஷன் பெயர் இங்கே கொடுக்கப்பட்டுள்ளது
 scrapeStream();
