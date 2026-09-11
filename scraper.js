@@ -14,7 +14,6 @@ async function scrapeStream() {
 
         let streamUrl = '';
 
-        // Network request capture for m3u8
         page.on('request', (request) => {
             const url = request.url();
             if (url.includes('.m3u8')) {
@@ -25,23 +24,23 @@ async function scrapeStream() {
         console.log("Navigating to target site...");
         await page.goto('https://stream2.zoloj.com/player?lang=tamil', { waitUntil: 'networkidle2', timeout: 60000 });
         
-        await new Promise(resolve => setTimeout(resolve, 8000));
+        // Wait for player to load contents and triggers
+        await new Promise(resolve => setTimeout(resolve, 12000));
 
-        // Fallback: evaluate page elements or global JS variables if any exist
+        // Search inside iframes if main page didn't trigger
         if (!streamUrl) {
-            streamUrl = await page.evaluate(() => {
-                // Check if video source is directly in a video tag or player instance
-                const video = document.querySelector('video');
-                if (video && video.src) return video.src;
-                
-                // Search scripts for m3u8 url
-                const scripts = Array.from(document.querySelectorAll('script'));
-                for (let script of scripts) {
-                    const match = script.textContent.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
-                    if (match) return match[0];
+            for (const frame of page.frames()) {
+                try {
+                    const frameContent = await frame.content();
+                    const match = frameContent.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
+                    if (match) {
+                        streamUrl = match[0];
+                        break;
+                    }
+                } catch (e) {
+                    // Ignore cross-origin frame errors
                 }
-                return '';
-            });
+            }
         }
 
         await browser.close();
@@ -51,8 +50,7 @@ async function scrapeStream() {
             fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
             console.log("Stream URL saved successfully:", streamUrl);
         } else {
-            console.log("Stream URL not found, using fallback pattern");
-            // If automated grab fails temporarily, keep structure safe
+            console.log("Stream URL not found");
             const data = { success: false, url: "", updated_at: new Date().toISOString() };
             fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
         }
