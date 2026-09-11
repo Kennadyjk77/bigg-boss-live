@@ -14,31 +14,34 @@ async function scrapeStream() {
 
         let streamUrl = '';
 
-        // Capture all network requests to find .m3u8 or video manifests
+        // Network request capture for m3u8
         page.on('request', (request) => {
             const url = request.url();
-            if (url.includes('.m3u8') || url.includes('.ts') || url.includes('playlist')) {
-                console.log("Captured potential stream URL:", url);
-                if (url.includes('.m3u8')) {
-                    streamUrl = url;
-                }
+            if (url.includes('.m3u8')) {
+                streamUrl = url;
             }
         });
 
         console.log("Navigating to target site...");
         await page.goto('https://stream2.zoloj.com/player?lang=tamil', { waitUntil: 'networkidle2', timeout: 60000 });
         
-        // Wait longer for video player and scripts to load fully
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 8000));
 
-        // Fallback: search inside page content if network event missed it
+        // Fallback: evaluate page elements or global JS variables if any exist
         if (!streamUrl) {
-            console.log("Checking page content for stream links...");
-            const html = await page.content();
-            const match = html.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
-            if (match) {
-                streamUrl = match[0];
-            }
+            streamUrl = await page.evaluate(() => {
+                // Check if video source is directly in a video tag or player instance
+                const video = document.querySelector('video');
+                if (video && video.src) return video.src;
+                
+                // Search scripts for m3u8 url
+                const scripts = Array.from(document.querySelectorAll('script'));
+                for (let script of scripts) {
+                    const match = script.textContent.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
+                    if (match) return match[0];
+                }
+                return '';
+            });
         }
 
         await browser.close();
@@ -48,8 +51,8 @@ async function scrapeStream() {
             fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
             console.log("Stream URL saved successfully:", streamUrl);
         } else {
-            console.log("Stream URL not found after deep scan");
-            // Save empty/error state so json exists for pages
+            console.log("Stream URL not found, using fallback pattern");
+            // If automated grab fails temporarily, keep structure safe
             const data = { success: false, url: "", updated_at: new Date().toISOString() };
             fs.writeFileSync('stream.json', JSON.stringify(data, null, 2));
         }
